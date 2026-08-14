@@ -29,9 +29,11 @@ PY_LDFLAGS  := $(shell python3.13-config --ldflags --embed)
 GHC         := ghc
 GHC_PKGS    := -package SHA -package directory -package bytestring
 CXX         := g++
-CXXFLAGS    := -O2 -std=c++17 -fPIC -I$(BUILD_DIR)
-QT_FLAGS    := $(shell pkg-config --cflags --libs Qt6Widgets Qt6Core)
+QT_CFLAGS   := $(shell pkg-config --cflags Qt6Widgets Qt6Core Qt6Gui)
+QT_LIBS     := $(shell pkg-config --libs Qt6Widgets Qt6Core Qt6Gui)
 MOC         := /usr/lib/qt6/libexec/moc
+MOC_FLAGS   := $(shell pkg-config --cflags Qt6Core)
+CXXFLAGS    := -O2 -std=c++17 -fPIC $(QT_CFLAGS) -Ibuild
 
 BUILD_DIR   := build
 
@@ -72,13 +74,13 @@ $(BUILD_DIR)/libintegrity.so: src/haskell/Integrity.hs
 
 $(BUILD_DIR)/operation_worker.moc.cpp: src/cpp/operation_worker.h
 	mkdir -p $(BUILD_DIR)
-	$(MOC) $(shell pkg-config --cflags Qt6Core) \
+	$(MOC) $(MOC_FLAGS) \
 		src/cpp/operation_worker.h \
 		-o $(BUILD_DIR)/operation_worker.moc.cpp
 
 $(BUILD_DIR)/recovery_core.moc: src/cpp/recovery_core.cpp
 	mkdir -p $(BUILD_DIR)
-	$(MOC) $(shell pkg-config --cflags Qt6Core) \
+	$(MOC) $(MOC_FLAGS) \
 		src/cpp/recovery_core.cpp \
 		-o $(BUILD_DIR)/recovery_core.moc
 
@@ -89,11 +91,11 @@ $(BUILD_DIR)/recovery_core.moc: src/cpp/recovery_core.cpp
 standard: $(BUILD_DIR)/downloader $(BUILD_DIR)/libintegrity.so \
           $(BUILD_DIR)/operation_worker.moc.cpp $(BUILD_DIR)/recovery_core.moc
 	$(CXX) $(CXXFLAGS) \
-		$(QT_FLAGS) \
 		src/cpp/recovery_core.cpp \
 		$(BUILD_DIR)/operation_worker.moc.cpp \
 		-L$(BUILD_DIR) -lintegrity \
 		-Wl,-rpath,$(BUILD_DIR) \
+		$(QT_LIBS) \
 		-o $(BUILD_DIR)/recovery_core_standard
 	@echo "[velumrec] Standard build completo."
 
@@ -110,12 +112,12 @@ aggressive: $(BUILD_DIR)/downloader $(BUILD_DIR)/libintegrity.so \
             $(BUILD_DIR)/operation_worker.moc.cpp $(BUILD_DIR)/recovery_core.moc \
             $(BUILD_DIR)/velumrec_hc.o
 	$(CXX) $(CXXFLAGS) -DVELUMREC_AGGRESSIVE \
-		$(QT_FLAGS) \
 		src/cpp/recovery_core.cpp \
 		$(BUILD_DIR)/operation_worker.moc.cpp \
 		$(BUILD_DIR)/velumrec_hc.o \
 		-L$(BUILD_DIR) -lintegrity \
 		-Wl,-rpath,$(BUILD_DIR) \
+		$(QT_LIBS) \
 		-o $(BUILD_DIR)/recovery_core_aggressive
 	@echo "[velumrec] Aggressive build completo."
 
