@@ -344,7 +344,7 @@ private:
         auto *headerLayout = new QHBoxLayout(header);
         headerLayout->setContentsMargins(80, 0, 80, 0);
 
-        auto *titleLabel = new QLabel("Velum OS <span style='color:%1;font-weight:600;'>Recovery</span>").arg(GOLD));
+        auto *titleLabel = new QLabel(QString("Velum OS <span style='color:%1;font-weight:600;'>Recovery</span>").arg(GOLD));
         titleLabel->setTextFormat(Qt::RichText);
         titleLabel->setStyleSheet(QString("color:%1; font-size:26px; font-weight:300;").arg(TEXT));
 
@@ -539,7 +539,7 @@ private:
         footerLayout->setContentsMargins(80, 0, 80, 0);
 
         auto *footerLeft = new QLabel(
-            "<span style='color:#22c55e;'>●</span> "
+            QString("<span style='color:#22c55e;'>●</span> "
             "<span style='color:%1; font-family:Consolas,monospace; font-size:11px;'>"
             "Velum OS Recovery — Haskell Integrity Module activo</span>").arg(TEXT_DIM));
         footerLeft->setTextFormat(Qt::RichText);
