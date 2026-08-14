@@ -50,7 +50,7 @@ public:
 
 signals:
     void logLine(const QString &line, const QString &cls);
-    void finished(bool success, int elapsed);
+    void opDone(bool success, int elapsed);
 
 protected:
     void run() override;

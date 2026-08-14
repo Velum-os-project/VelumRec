@@ -22,6 +22,7 @@
 #include <QPushButton>
 #include <QListWidget>
 #include <QListWidgetItem>
+#include <QList>
 #include <QTextEdit>
 #include <QTimer>
 #include <QElapsedTimer>
@@ -29,6 +30,9 @@
 #include <QDateTime>
 #include <QString>
 #include <QPalette>
+#include <QColor>
+#include <QSize>
+#include <QSizePolicy>
 #include <fstream>
 #include <string>
 #include <sys/stat.h>
@@ -82,7 +86,7 @@ void OperationWorker::run() {
         log("[integrity] Verificando LSM, ABAC, VTA...");
         if (velumrec_precheck() != 0) {
             log("[integrity] FAILED: pre-check fallido.", "err");
-            emit finished(false, (int)(timer.elapsed() / 1000));
+            emit opDone(false, (int)(timer.elapsed() / 1000));
             return;
         }
         log("[integrity] OK: pre-check superado.", "ok");
@@ -180,7 +184,7 @@ void OperationWorker::run() {
         }
     }
 
-    emit finished(ok, (int)(timer.elapsed() / 1000));
+    emit opDone(ok, (int)(timer.elapsed() / 1000));
 }
 
 // ================================================================
@@ -550,7 +554,7 @@ private slots:
                     QString("<span style='color:%1;'>%2</span>").arg(color, line));
             }, Qt::QueuedConnection);
 
-        connect(worker, &OperationWorker::finished, this,
+        connect(worker, &OperationWorker::opDone, this,
             [this](bool success, int elapsed) {
                 if (elapsedTimer) elapsedTimer->stop();
                 btnRun->setEnabled(true);
