@@ -55,6 +55,7 @@ $(BUILD_DIR)/downloader.c: src/python/downloader.py
 $(BUILD_DIR)/downloader: $(BUILD_DIR)/downloader.c
 	gcc -O2 $(BUILD_DIR)/downloader.c \
 		$(PYTHON_FLAGS) \
+		-lpython3.13 \
 		-lcurl \
 		-o $(BUILD_DIR)/downloader
 
