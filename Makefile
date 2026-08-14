@@ -33,7 +33,7 @@ GHC_PACKAGES := -package SHA -package directory -package bytestring
 CXX          := g++
 CXXFLAGS     := -O2 -std=c++17 -fPIC
 QT_FLAGS     := $(shell pkg-config --cflags --libs Qt6Widgets Qt6Core)
-MOC          := moc
+MOC          := /usr/lib/qt6/libexec/moc
 
 BUILD_DIR    := build
 
