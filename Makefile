@@ -1,52 +1,33 @@
 # ==============================================================================
 # Velum OS - Core Enterprise Infrastructure
 # Copyright (C) 2026 Velum OS Project Contributors <velum_os_project@proton.me>
-#
-# This program is free software: you can redistribute it and/or modify
-# it under the terms of the GNU Affero General Public License as published
-# by the Free Software Foundation, either version 3 of the License, or
-# (at your option) any later version.
+# AGPLv3 — see LICENSE
 # ==============================================================================
 # VelumRec - Makefile
-# Compila los componentes de la partición de recovery:
-#   1. Python → Cython (downloader.py)
-#   2. Haskell → shared lib (Integrity.hs)
-#   3. Qt6 MOC → metaobjetos para recovery_core.cpp
-#   4. C++ Qt6 → recovery_core (standard y aggressive)
-#
-# recovery_setup.py lo compila OBS al hacer apt install velum-rec.
-#
+
 # Uso:
 #   make              -> compila standard y aggressive
 #   make standard     -> solo standard (sin HolyC)
 #   make aggressive   -> solo aggressive (con HolyC)
 #   make clean        -> limpia todos los artefactos
 
-# ================================================================
-# CONFIGURACION
-# ================================================================
+PY_INCLUDES := $(shell python3.13-config --includes)
+PY_LDFLAGS  := $(shell python3.13-config --ldflags --embed)
+GHC         := ghc
+GHC_PKGS    := -package SHA -package directory -package bytestring
+CXX         := g++
+CXXFLAGS    := -O2 -std=c++17 -fPIC
+QT_FLAGS    := $(shell pkg-config --cflags --libs Qt6Widgets Qt6Core)
+MOC         := /usr/lib/qt6/libexec/moc
 
-PY_INCLUDES  := $(shell python3.13-config --includes)
-PY_LDFLAGS   := $(shell python3.13-config --ldflags --embed)
-GHC          := ghc
-GHC_PACKAGES := -package SHA -package directory -package bytestring
-CXX          := g++
-CXXFLAGS     := -O2 -std=c++17 -fPIC
-QT_FLAGS     := $(shell pkg-config --cflags --libs Qt6Widgets Qt6Core)
-MOC          := /usr/lib/qt6/libexec/moc
-
-BUILD_DIR    := build
-
-# ================================================================
-# TARGETS PRINCIPALES
-# ================================================================
+BUILD_DIR   := build
 
 .PHONY: all standard aggressive clean
 
 all: standard aggressive
 
 # ================================================================
-# 1. CYTHON — downloader.py -> downloader (particion de recovery)
+# 1. CYTHON — downloader.py -> downloader
 # ================================================================
 
 $(BUILD_DIR)/downloader.c: src/python/downloader.py
@@ -68,61 +49,62 @@ $(BUILD_DIR)/downloader: $(BUILD_DIR)/downloader.c
 $(BUILD_DIR)/libintegrity.so: src/haskell/Integrity.hs
 	mkdir -p $(BUILD_DIR)
 	$(GHC) -shared -dynamic -fPIC \
-		$(GHC_PACKAGES) \
+		$(GHC_PKGS) \
 		src/haskell/Integrity.hs \
 		-o $(BUILD_DIR)/libintegrity.so
 
 # ================================================================
-# 3. MOC — genera metaobjetos Qt6 para recovery_core.cpp
+# 3. MOC — procesa operation_worker.h y recovery_core.cpp
 # ================================================================
 
-$(BUILD_DIR)/recovery_core.moc.cpp: src/cpp/recovery_core.cpp
+$(BUILD_DIR)/operation_worker.moc.cpp: src/cpp/operation_worker.h
+	mkdir -p $(BUILD_DIR)
+	$(MOC) $(shell pkg-config --cflags Qt6Core) \
+		src/cpp/operation_worker.h \
+		-o $(BUILD_DIR)/operation_worker.moc.cpp
+
+$(BUILD_DIR)/recovery_core.moc: src/cpp/recovery_core.cpp
 	mkdir -p $(BUILD_DIR)
 	$(MOC) $(shell pkg-config --cflags Qt6Core) \
 		src/cpp/recovery_core.cpp \
-		-o $(BUILD_DIR)/recovery_core.moc.cpp
+		-o $(BUILD_DIR)/recovery_core.moc
 
 # ================================================================
-# 4. C++ STANDARD — sin HolyC
+# 4. C++ STANDARD
 # ================================================================
 
-standard: $(BUILD_DIR)/downloader $(BUILD_DIR)/libintegrity.so $(BUILD_DIR)/recovery_core.moc.cpp
+standard: $(BUILD_DIR)/downloader $(BUILD_DIR)/libintegrity.so \
+          $(BUILD_DIR)/operation_worker.moc.cpp $(BUILD_DIR)/recovery_core.moc
 	$(CXX) $(CXXFLAGS) \
 		$(QT_FLAGS) \
 		src/cpp/recovery_core.cpp \
-		$(BUILD_DIR)/recovery_core.moc.cpp \
+		$(BUILD_DIR)/operation_worker.moc.cpp \
 		-L$(BUILD_DIR) -lintegrity \
 		-Wl,-rpath,$(BUILD_DIR) \
 		-o $(BUILD_DIR)/recovery_core_standard
-	@echo ""
-	@echo "[velumrec] Standard build completo:"
-	@echo "  $(BUILD_DIR)/downloader              <- descargador de ISO/modulos"
-	@echo "  $(BUILD_DIR)/recovery_core_standard  <- UI Qt6 de recovery (sin HolyC)"
+	@echo "[velumrec] Standard build completo."
 
 # ================================================================
-# 5. C++ AGGRESSIVE — con HolyC
+# 5. C++ AGGRESSIVE
 # ================================================================
 
 $(BUILD_DIR)/velumrec_hc.o: src/holyc/velumrec.HC
 	@which holyc-lang > /dev/null 2>&1 || \
-		{ echo "[velumrec] Error: holyc-lang no encontrado."; \
-		  echo "           Instalalo antes de compilar aggressive."; \
-		  exit 1; }
+		{ echo "[velumrec] Error: holyc-lang no encontrado."; exit 1; }
 	holyc-lang -c src/holyc/velumrec.HC -o $(BUILD_DIR)/velumrec_hc.o
 
-aggressive: $(BUILD_DIR)/downloader $(BUILD_DIR)/libintegrity.so $(BUILD_DIR)/recovery_core.moc.cpp $(BUILD_DIR)/velumrec_hc.o
+aggressive: $(BUILD_DIR)/downloader $(BUILD_DIR)/libintegrity.so \
+            $(BUILD_DIR)/operation_worker.moc.cpp $(BUILD_DIR)/recovery_core.moc \
+            $(BUILD_DIR)/velumrec_hc.o
 	$(CXX) $(CXXFLAGS) -DVELUMREC_AGGRESSIVE \
 		$(QT_FLAGS) \
 		src/cpp/recovery_core.cpp \
-		$(BUILD_DIR)/recovery_core.moc.cpp \
+		$(BUILD_DIR)/operation_worker.moc.cpp \
 		$(BUILD_DIR)/velumrec_hc.o \
 		-L$(BUILD_DIR) -lintegrity \
 		-Wl,-rpath,$(BUILD_DIR) \
 		-o $(BUILD_DIR)/recovery_core_aggressive
-	@echo ""
-	@echo "[velumrec] Aggressive build completo:"
-	@echo "  $(BUILD_DIR)/downloader                 <- descargador de ISO/modulos"
-	@echo "  $(BUILD_DIR)/recovery_core_aggressive   <- UI Qt6 de recovery (con HolyC)"
+	@echo "[velumrec] Aggressive build completo."
 
 # ================================================================
 # CLEAN
