@@ -1,8 +1,21 @@
 # ==============================================================================
 # Velum OS - Core Enterprise Infrastructure
 # Copyright (C) 2026 Velum OS Project Contributors <velum_os_project@proton.me>
-# AGPLv3 — see LICENSE
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://gnu.org>.
 # ==============================================================================
+
 # VelumRec - Makefile
 
 # Uso:
@@ -16,7 +29,7 @@ PY_LDFLAGS  := $(shell python3.13-config --ldflags --embed)
 GHC         := ghc
 GHC_PKGS    := -package SHA -package directory -package bytestring
 CXX         := g++
-CXXFLAGS    := -O2 -std=c++17 -fPIC
+CXXFLAGS    := -O2 -std=c++17 -fPIC -I$(BUILD_DIR)
 QT_FLAGS    := $(shell pkg-config --cflags --libs Qt6Widgets Qt6Core)
 MOC         := /usr/lib/qt6/libexec/moc
 
