@@ -1,0 +1,14 @@
+Source: velum-rec
+Section: admin
+Priority: optional
+Maintainer: Velum OS Project Contributors <velum_os_project@proton.me>
+Build-Depends: debhelper (>= 13), cython3, python3-dev, libcurl4-openssl-dev
+Standards-Version: 4.6.0
+
+Package: velum-rec
+Architecture: amd64
+Depends: grub2-common, libcurl4, gpg
+Description: Enterprise recovery tool for Velum OS
+ VelumRec operates below the kernel, LSM, and VTA to repair damage
+ that no other tool can reach. Requires Layer 3+ for standard mode,
+ Layer 4 for aggressive mode.

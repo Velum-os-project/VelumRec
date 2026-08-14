@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+VELUM_GROUP=$(id -Gn | tr ' ' '\n' | grep "^velum_.*_layer[0-9]*$" | sort -t_ -k3 -n | tail -1)
+
+if [ -n "$VELUM_GROUP" ]; then
+    DEPARTMENT=$(echo "$VELUM_GROUP" | sed 's/^velum_//' | sed 's/_layer[0-9]*$//')
+    LAYER=$(echo "$VELUM_GROUP" | sed 's/.*_layer//')
+    BINARY="/velum/$DEPARTMENT/layer$LAYER/velumrec"
+    if [ -f "$BINARY" ]; then
+        rm -f "$BINARY"
+        echo "[velum-rec] Removed $BINARY"
+    fi
+fi
+
+if [ -f /etc/grub.d/42_velumrec ]; then
+    rm -f /etc/grub.d/42_velumrec
+    update-grub 2>/dev/null || true
+fi
