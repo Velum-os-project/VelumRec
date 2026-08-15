@@ -36,8 +36,8 @@
 #   E16 - Fallo compilando recovery_core_aggressive (G++)
 #
 # Uso:
-#   bash build.sh           -> compila standard y aggressive
-#   bash build.sh standard  -> solo standard
+#   bash build.sh            -> compila standard y aggressive
+#   bash build.sh standard   -> solo standard
 #   bash build.sh aggressive -> solo aggressive
 # ==============================================================================
 
@@ -51,31 +51,73 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-CURRENT=0
-TOTAL=5
+# ================================================================
+# BARRA DE PROGRESO REAL — corre en background mientras compila
+# ================================================================
+spinner_pid=""
 
-progress() {
-    CURRENT=$((CURRENT + 1))
-    local pct=$((CURRENT * 100 / TOTAL))
-    local filled=$((pct / 5))
-    local empty=$((20 - filled))
-    local bar=$(printf '#%.0s' $(seq 1 $filled 2>/dev/null))$(printf -- '-%.0s' $(seq 1 $empty 2>/dev/null))
-    printf "${CYAN}[%s] %3d%%${NC}  %s\n" "$bar" "$pct" "$1"
+start_progress() {
+    local label="$1"
+    local cols=30
+    printf "${CYAN}%-40s${NC} [" "$label"
+    (
+        i=0
+        while true; do
+            filled=$((i % (cols + 1)))
+            empty=$((cols - filled))
+            bar=$(printf '#%.0s' $(seq 1 $filled 2>/dev/null))
+            spaces=$(printf ' %.0s' $(seq 1 $empty 2>/dev/null))
+            pct=$(( (filled * 100) / cols ))
+            printf "\r${CYAN}%-40s${NC} [${GREEN}%s%s${NC}] %3d%%" \
+                "$label" "$bar" "$spaces" "$pct"
+            i=$((i + 1))
+            sleep 0.08
+        done
+    ) &
+    spinner_pid=$!
 }
 
+stop_progress() {
+    local success=$1
+    if [ -n "$spinner_pid" ]; then
+        kill "$spinner_pid" 2>/dev/null
+        wait "$spinner_pid" 2>/dev/null
+        spinner_pid=""
+    fi
+    local cols=30
+    local bar=$(printf '#%.0s' $(seq 1 $cols 2>/dev/null))
+    if [ "$success" = "ok" ]; then
+        printf "\r${CYAN}%-40s${NC} [${GREEN}%s${NC}] ${GREEN}OK${NC}\n" "$1" "$bar"
+    else
+        printf "\r${CYAN}%-40s${NC} [${RED}%s${NC}] ${RED}FAIL${NC}\n" "$1" "$bar"
+    fi
+}
+
+# ================================================================
+# MANEJO DE ERRORES
+# ================================================================
 fail() {
     local code=$1
     local msg=$2
-    echo -e "${RED}[$code]${NC} $msg"
+    echo -e "\n${RED}[$code]${NC} $msg"
     echo "[$code] $msg" >> "$LOG"
     ERRORS+=("$code: $msg")
 }
 
 run() {
     local code=$1
-    local msg=$2
-    shift 2
-    "$@" >> "$LOG" 2>&1 || { fail "$code" "$msg"; return 1; }
+    local label=$2
+    local errmsg=$3
+    shift 3
+    start_progress "$label"
+    "$@" >> "$LOG" 2>&1
+    local exit_code=$?
+    if [ $exit_code -ne 0 ]; then
+        stop_progress "$label" "fail"
+        fail "$code" "$errmsg"
+        return 1
+    fi
+    stop_progress "$label" "ok"
 }
 
 # ================================================================
@@ -130,23 +172,22 @@ detect_tools() {
 build_common() {
     mkdir -p build
 
-    progress "Compilando downloader.py con Cython..."
-    run "E08" "Cython falló en downloader.py" \
+    run "E08" "downloader.py → Cython" "Cython falló en downloader.py" \
         cython3 --embed src/python/downloader.py -o build/downloader.c || return 1
-    run "E09" "GCC falló compilando downloader" \
+
+    run "E09" "downloader.c → GCC" "GCC falló compilando downloader" \
         gcc -O2 $PY_INC build/downloader.c -lcurl $PY_LDFLAGS -o build/downloader || return 1
 
-    progress "Compilando Integrity.hs con GHC..."
-    run "E10" "GHC falló en Integrity.hs" \
+    run "E10" "Integrity.hs → GHC" "GHC falló en Integrity.hs" \
         ghc -shared -dynamic -fPIC \
         -package SHA -package directory -package bytestring \
         src/haskell/Integrity.hs \
         -o build/libintegrity.so || return 1
 
-    progress "Generando metaobjetos Qt6 con MOC..."
-    run "E11" "MOC falló en operation_worker.h" \
+    run "E11" "operation_worker.h → MOC" "MOC falló en operation_worker.h" \
         $MOC $QT_INC src/cpp/operation_worker.h -o build/operation_worker.moc.cpp || return 1
-    run "E12" "MOC falló en recovery_core.cpp" \
+
+    run "E12" "recovery_core.cpp → MOC" "MOC falló en recovery_core.cpp" \
         $MOC $QT_INC src/cpp/recovery_core.cpp -o build/recovery_core.moc || return 1
 }
 
@@ -154,13 +195,10 @@ build_common() {
 # STANDARD
 # ================================================================
 build_standard() {
-    TOTAL=5; CURRENT=0
     echo ""; echo -e "${CYAN}=== Standard Build ===${NC}"; echo ""
-
     build_common || return 1
 
-    progress "Compilando recovery_core_standard..."
-    run "E13" "G++ falló compilando standard" \
+    run "E13" "recovery_core_standard → G++" "G++ falló compilando standard" \
         g++ -O2 -std=c++17 -fPIC \
         $QT_INC -Ibuild \
         src/cpp/recovery_core.cpp \
@@ -170,32 +208,28 @@ build_standard() {
         $QT_LIBS \
         -o build/recovery_core_standard || return 1
 
-    progress "Standard build completo."
     echo ""
-    echo -e "${GREEN}  build/downloader${NC}"
-    echo -e "${GREEN}  build/libintegrity.so${NC}"
-    echo -e "${GREEN}  build/recovery_core_standard${NC}"
+    echo -e "${GREEN}  ✓ build/downloader${NC}"
+    echo -e "${GREEN}  ✓ build/libintegrity.so${NC}"
+    echo -e "${GREEN}  ✓ build/recovery_core_standard${NC}"
 }
 
 # ================================================================
 # AGGRESSIVE
 # ================================================================
 build_aggressive() {
-    TOTAL=6; CURRENT=0
     echo ""; echo -e "${CYAN}=== Aggressive Build ===${NC}"; echo ""
-
     build_common || return 1
 
-    progress "Compilando HolyC..."
     if ! which holyc-lang > /dev/null 2>&1; then
         fail "E14" "holyc-lang no encontrado"
         return 1
     fi
-    run "E15" "holyc-lang falló en velumrec.HC" \
+
+    run "E15" "velumrec.HC → holyc-lang" "holyc-lang falló en velumrec.HC" \
         holyc-lang -c src/holyc/velumrec.HC -o build/velumrec_hc.o || return 1
 
-    progress "Compilando recovery_core_aggressive..."
-    run "E16" "G++ falló compilando aggressive" \
+    run "E16" "recovery_core_aggressive → G++" "G++ falló compilando aggressive" \
         g++ -O2 -std=c++17 -fPIC -DVELUMREC_AGGRESSIVE \
         $QT_INC -Ibuild \
         src/cpp/recovery_core.cpp \
@@ -206,11 +240,10 @@ build_aggressive() {
         $QT_LIBS \
         -o build/recovery_core_aggressive || return 1
 
-    progress "Aggressive build completo."
     echo ""
-    echo -e "${GREEN}  build/downloader${NC}"
-    echo -e "${GREEN}  build/libintegrity.so${NC}"
-    echo -e "${GREEN}  build/recovery_core_aggressive${NC}"
+    echo -e "${GREEN}  ✓ build/downloader${NC}"
+    echo -e "${GREEN}  ✓ build/libintegrity.so${NC}"
+    echo -e "${GREEN}  ✓ build/recovery_core_aggressive${NC}"
 }
 
 # ================================================================
@@ -225,7 +258,7 @@ print_summary() {
         for e in "${ERRORS[@]}"; do
             echo -e "  ${RED}✗${NC} $e"
         done
-        echo -e "\n  Log: ${CYAN}$LOG${NC}"
+        echo -e "\n  Log completo: ${CYAN}$LOG${NC}"
     fi
 }
 
