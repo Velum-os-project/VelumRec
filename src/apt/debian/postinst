@@ -1,8 +1,6 @@
 #!/bin/sh
 set -e
 
-import grp 2>/dev/null || true
-
 VELUM_GROUP=$(id -Gn | tr ' ' '\n' | grep "^velum_.*_layer[0-9]*$" | sort -t_ -k3 -n | tail -1)
 
 if [ -z "$VELUM_GROUP" ]; then

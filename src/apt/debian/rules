@@ -5,7 +5,8 @@
 override_dh_auto_build:
 	cython3 --embed recovery_setup.py -o recovery_setup.c
 	gcc -O2 -o velumrec recovery_setup.c \
-		$(shell python3-config --includes --ldflags) \
+		$(shell python3-config --includes) \
+		$(shell python3-config --ldflags --embed) \
 		-lcurl
 
 override_dh_auto_install:

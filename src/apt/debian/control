@@ -2,7 +2,7 @@ Source: velum-rec
 Section: admin
 Priority: optional
 Maintainer: Velum OS Project Contributors <velum_os_project@proton.me>
-Build-Depends: debhelper (>= 13), cython3, python3-dev, libcurl4-openssl-dev
+Build-Depends: debhelper (>= 13), cython3, python3-dev, python3-full, libcurl4-openssl-dev
 Standards-Version: 4.6.0
 
 Package: velum-rec
