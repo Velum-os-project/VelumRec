@@ -1,0 +1,213 @@
+# ==============================================================================
+# Velum OS - Core Enterprise Infrastructure
+# Copyright (C) 2026 Velum OS Project Contributors <velum_os_project@proton.me>
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as published
+# by the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program. If not, see <https://gnu.org>.
+# ==============================================================================
+
+name: VelumRec Build
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+
+  # ============================================================
+  # ETAPA 1 — PREPARACIÓN
+  # Instala dependencias y compila holyc-lang
+  # ============================================================
+  prepare:
+    name: Preparación
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout VelumRec
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cython3 python3-dev python3-full \
+            libcurl4-openssl-dev \
+            ghc libghc-sha-dev libghc-directory-dev \
+            g++ cmake gcc \
+            qt6-base-dev qt6-base-private-dev \
+            pkg-config
+
+      - name: Clonar y compilar holyc-lang
+        run: |
+          git clone https://github.com/Jamesbarford/holyc-lang holyc-lang-src
+          cd holyc-lang-src
+          make
+          sudo make install
+          which holyc-lang
+          holyc-lang --version || true
+
+      - name: Cachear holyc-lang
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/holyc-lang
+          key: holyc-lang-${{ runner.os }}-${{ hashFiles('holyc-lang-src/**') }}
+
+  # ============================================================
+  # ETAPA 2 — STANDARD BUILD
+  # ============================================================
+  standard:
+    name: Standard Build
+    runs-on: ubuntu-latest
+    needs: prepare
+    steps:
+      - name: Checkout VelumRec
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cython3 python3-dev python3-full \
+            libcurl4-openssl-dev \
+            ghc libghc-sha-dev libghc-directory-dev \
+            g++ \
+            qt6-base-dev qt6-base-private-dev \
+            pkg-config
+
+      - name: Build downloader (Cython → GCC)
+        run: |
+          mkdir -p build
+          cython3 --embed src/python/downloader.py -o build/downloader.c
+          gcc -O2 \
+            $(python3-config --includes) \
+            build/downloader.c \
+            -lcurl \
+            $(python3-config --ldflags --embed) \
+            -o build/downloader
+
+      - name: Build Integrity (GHC)
+        run: |
+          ghc -shared -dynamic -fPIC \
+            -package SHA -package directory -package bytestring \
+            src/haskell/Integrity.hs \
+            -o build/libintegrity.so
+
+      - name: Generar MOC
+        run: |
+          MOC=$(find /usr -name moc -path "*/qt6/*" | head -1)
+          QT_INC=$(pkg-config --cflags Qt6Core)
+          $MOC $QT_INC src/cpp/operation_worker.h -o build/operation_worker.moc.cpp
+          $MOC $QT_INC src/cpp/recovery_core.cpp  -o build/recovery_core.moc
+
+      - name: Build recovery_core_standard (G++)
+        run: |
+          g++ -O2 -std=c++17 -fPIC \
+            $(pkg-config --cflags Qt6Widgets Qt6Core Qt6Gui) \
+            -Ibuild \
+            src/cpp/recovery_core.cpp \
+            build/operation_worker.moc.cpp \
+            -Lbuild -lintegrity \
+            -Wl,-rpath,build \
+            $(pkg-config --libs Qt6Widgets Qt6Core Qt6Gui) \
+            -o build/recovery_core_standard
+
+      - name: Upload standard artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: velumrec-standard
+          path: |
+            build/downloader
+            build/libintegrity.so
+            build/recovery_core_standard
+
+  # ============================================================
+  # ETAPA 3 — AGGRESSIVE BUILD
+  # Depende de standard y de que holyc-lang esté disponible
+  # ============================================================
+  aggressive:
+    name: Aggressive Build
+    runs-on: ubuntu-latest
+    needs: standard
+    steps:
+      - name: Checkout VelumRec
+        uses: actions/checkout@v4
+
+      - name: Instalar dependencias del sistema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            cython3 python3-dev python3-full \
+            libcurl4-openssl-dev \
+            ghc libghc-sha-dev libghc-directory-dev \
+            g++ cmake gcc \
+            qt6-base-dev qt6-base-private-dev \
+            pkg-config
+
+      - name: Clonar y compilar holyc-lang
+        run: |
+          git clone https://github.com/Jamesbarford/holyc-lang holyc-lang-src
+          cd holyc-lang-src
+          make
+          sudo make install
+
+      - name: Build downloader (Cython → GCC)
+        run: |
+          mkdir -p build
+          cython3 --embed src/python/downloader.py -o build/downloader.c
+          gcc -O2 \
+            $(python3-config --includes) \
+            build/downloader.c \
+            -lcurl \
+            $(python3-config --ldflags --embed) \
+            -o build/downloader
+
+      - name: Build Integrity (GHC)
+        run: |
+          ghc -shared -dynamic -fPIC \
+            -package SHA -package directory -package bytestring \
+            src/haskell/Integrity.hs \
+            -o build/libintegrity.so
+
+      - name: Generar MOC
+        run: |
+          MOC=$(find /usr -name moc -path "*/qt6/*" | head -1)
+          QT_INC=$(pkg-config --cflags Qt6Core)
+          $MOC $QT_INC src/cpp/operation_worker.h -o build/operation_worker.moc.cpp
+          $MOC $QT_INC src/cpp/recovery_core.cpp  -o build/recovery_core.moc
+
+      - name: Build velumrec.HC (holyc-lang)
+        run: |
+          holyc-lang -c src/holyc/velumrec.HC -o build/velumrec_hc.o
+
+      - name: Build recovery_core_aggressive (G++)
+        run: |
+          g++ -O2 -std=c++17 -fPIC -DVELUMREC_AGGRESSIVE \
+            $(pkg-config --cflags Qt6Widgets Qt6Core Qt6Gui) \
+            -Ibuild \
+            src/cpp/recovery_core.cpp \
+            build/operation_worker.moc.cpp \
+            build/velumrec_hc.o \
+            -Lbuild -lintegrity \
+            -Wl,-rpath,build \
+            $(pkg-config --libs Qt6Widgets Qt6Core Qt6Gui) \
+            -o build/recovery_core_aggressive
+
+      - name: Upload aggressive artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: velumrec-aggressive
+          path: |
+            build/downloader
+            build/libintegrity.so
+            build/recovery_core_aggressive
