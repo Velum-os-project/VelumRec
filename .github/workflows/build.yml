@@ -39,7 +39,7 @@ jobs:
           sudo apt-get install -y \
             cython3 python3-dev python3-full \
             libcurl4-openssl-dev \
-            ghc libghc-sha-dev libghc-directory-dev \
+            ghc cabal-install \
             g++ \
             qt6-base-dev qt6-base-private-dev \
             pkg-config
@@ -57,6 +57,7 @@ jobs:
 
       - name: Build Integrity (GHC)
         run: |
+          cabal update && cabal install SHA --lib
           ghc -shared -dynamic -fPIC \
             -package SHA -package directory -package bytestring \
             src/haskell/Integrity.hs \
@@ -103,7 +104,7 @@ jobs:
           sudo apt-get install -y \
             cython3 python3-dev python3-full \
             libcurl4-openssl-dev \
-            ghc libghc-sha-dev libghc-directory-dev \
+            ghc cabal-install \
             g++ \
             qt6-base-dev qt6-base-private-dev \
             pkg-config
@@ -121,6 +122,7 @@ jobs:
 
       - name: Build Integrity (GHC)
         run: |
+          cabal update && cabal install SHA --lib
           ghc -shared -dynamic -fPIC \
             -package SHA -package directory -package bytestring \
             src/haskell/Integrity.hs \
