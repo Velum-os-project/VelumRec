@@ -55,13 +55,26 @@ jobs:
             $(python3-config --ldflags --embed) \
             -o build/downloader
 
-      - name: Build Integrity (GHC)
+      - name: Build Integrity (GHC → object file)
         run: |
           cabal update && cabal install SHA --lib
+          # Compilar a .o en lugar de .so para evitar dependencias del runtime GHC
+          ghc -c -fPIC \
+            -package SHA -package directory -package bytestring \
+            src/haskell/Integrity.hs \
+            -o build/Integrity.o
+          # Exportar symbols C para que G++ pueda llamarlos
           ghc -shared -dynamic -fPIC \
             -package SHA -package directory -package bytestring \
             src/haskell/Integrity.hs \
-            -o build/libintegrity.so
+            -o build/libintegrity.so \
+            $(ghc --print-libdir)/rts/libHSrts-ghc$(ghc --numeric-version).so 2>/dev/null || \
+          # Fallback: enlazar con todas las libs de GHC
+          ghc -shared -fPIC \
+            -package SHA -package directory -package bytestring \
+            src/haskell/Integrity.hs \
+            -o build/libintegrity.so \
+            -optl-Wl,--allow-shlib-undefined
 
       - name: Generate MOC
         run: |
@@ -72,6 +85,8 @@ jobs:
 
       - name: Build recovery_core_standard (G++)
         run: |
+          GHC_LIBDIR=$(ghc --print-libdir)
+          GHC_VER=$(ghc --numeric-version)
           g++ -O2 -std=c++17 -fPIC \
             $(pkg-config --cflags Qt6Widgets Qt6Core Qt6Gui) \
             -Ibuild \
@@ -79,6 +94,8 @@ jobs:
             build/operation_worker.moc.cpp \
             -Lbuild -lintegrity \
             -Wl,-rpath,build \
+            -Wl,-rpath,$GHC_LIBDIR/rts \
+            -L$GHC_LIBDIR/rts \
             $(pkg-config --libs Qt6Widgets Qt6Core Qt6Gui) \
             -o build/recovery_core_standard
 
@@ -105,9 +122,17 @@ jobs:
             cython3 python3-dev python3-full \
             libcurl4-openssl-dev \
             ghc cabal-install \
-            g++ \
+            g++ cmake gcc \
             qt6-base-dev qt6-base-private-dev \
             pkg-config
+
+      - name: Clonar y compilar holyc-lang
+        run: |
+          git clone https://github.com/Jamesbarford/holyc-lang holyc-lang-src
+          cd holyc-lang-src
+          make
+          sudo make install
+          which hcc
 
       - name: Build downloader (Cython)
         run: |
@@ -120,13 +145,14 @@ jobs:
             $(python3-config --ldflags --embed) \
             -o build/downloader
 
-      - name: Build Integrity (GHC)
+      - name: Build Integrity (GHC → object file)
         run: |
           cabal update && cabal install SHA --lib
           ghc -shared -dynamic -fPIC \
             -package SHA -package directory -package bytestring \
             src/haskell/Integrity.hs \
-            -o build/libintegrity.so
+            -o build/libintegrity.so \
+            -optl-Wl,--allow-shlib-undefined
 
       - name: Generate MOC
         run: |
@@ -135,15 +161,23 @@ jobs:
           $MOC $QT_INC src/cpp/operation_worker.h -o build/operation_worker.moc.cpp
           $MOC $QT_INC src/cpp/recovery_core.cpp  -o build/recovery_core.moc
 
+      - name: Build velumrec.HC (hcc)
+        run: |
+          hcc -c src/holyc/velumrec.HC -o build/velumrec_hc.o
+
       - name: Build recovery_core_aggressive (G++)
         run: |
+          GHC_LIBDIR=$(ghc --print-libdir)
           g++ -O2 -std=c++17 -fPIC -DVELUMREC_AGGRESSIVE \
             $(pkg-config --cflags Qt6Widgets Qt6Core Qt6Gui) \
             -Ibuild \
             src/cpp/recovery_core.cpp \
             build/operation_worker.moc.cpp \
+            build/velumrec_hc.o \
             -Lbuild -lintegrity \
             -Wl,-rpath,build \
+            -Wl,-rpath,$GHC_LIBDIR/rts \
+            -L$GHC_LIBDIR/rts \
             $(pkg-config --libs Qt6Widgets Qt6Core Qt6Gui) \
             -o build/recovery_core_aggressive
 
